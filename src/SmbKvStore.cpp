@@ -372,7 +372,7 @@ uint64_t SmbKvStore::replayWal(
         // Collect lines until a blank line (commit marker) or EOF.
         std::unordered_map<std::string, std::string> txBuffer;
         bool foundCommit = false;
-        size_t txStart = pos;
+        bool txMalformed = false;
 
         while (pos < buf.size()) {
             size_t lineEnd = buf.find('\n', pos);
@@ -396,12 +396,13 @@ uint64_t SmbKvStore::replayWal(
             std::string keyHex, valHex;
 
             if (!(ss >> op >> keyLen >> keyHex >> valLen >> valHex)) {
-                // Malformed line; skip the whole transaction.
-                txBuffer.clear();
+                // Malformed line: mark transaction as invalid and consume
+                // lines until the commit marker so pos stays consistent.
+                txMalformed = true;
                 continue;
             }
             if (op != "PUT") {
-                txBuffer.clear();
+                txMalformed = true;
                 continue;
             }
 
@@ -409,15 +410,17 @@ uint64_t SmbKvStore::replayWal(
             std::string value = fromHex(valHex);
 
             if (key.size() != keyLen || value.size() != valLen) {
-                // Length mismatch; skip.
-                txBuffer.clear();
+                // Length mismatch: mark transaction as invalid.
+                txMalformed = true;
                 continue;
             }
 
-            txBuffer[key] = value;
+            if (!txMalformed) {
+                txBuffer[key] = value;
+            }
         }
 
-        if (foundCommit) {
+        if (foundCommit && !txMalformed) {
             for (auto& [k, v] : txBuffer) {
                 targetMap[k] = v;
             }
