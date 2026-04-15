@@ -30,6 +30,27 @@ add_executable(smbkv_example examples/main.cpp)
 target_link_libraries(smbkv_example PRIVATE smbkv)
 
 # ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+enable_testing()
+
+add_executable(long_running_tx_test tests/long_running_tx_test.cpp)
+
+# On Windows the test uses SmbKvStore directly; on non-Windows it is
+# self-contained (POSIX implementation) but still links smbkv so the build
+# validates that the library compiles correctly on all platforms.
+target_link_libraries(long_running_tx_test PRIVATE smbkv)
+
+if(UNIX)
+    target_link_libraries(long_running_tx_test PRIVATE pthread)
+endif()
+
+add_test(NAME long_running_tx_test COMMAND long_running_tx_test)
+# Allow up to 60 s for the long-running transaction tests (they sleep 2 s
+# per scenario by design).
+set_tests_properties(long_running_tx_test PROPERTIES TIMEOUT 60)
+
+# ---------------------------------------------------------------------------
 # Install rules
 # ---------------------------------------------------------------------------
 include(GNUInstallDirs)
